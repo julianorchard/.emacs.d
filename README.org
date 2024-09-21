@@ -8,7 +8,7 @@ now I'm just using this simple elisp one (basically =use-package=
 everything).
 
 I now mainly use neovim and, for note taking,
-[https://logseq.com/][Logseq].
+[[https://logseq.com/][Logseq]].
 
 I would like to use this again in place of Logseq at some point but
 I'd rather invest my time elsewhere at the minute.
