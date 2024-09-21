@@ -1,0 +1,18 @@
+* Emacs Configuration
+
+I used to use Emacs a lot and now I use it barely at all! 
+
+This configuration is a very cut down version of my old one. I used to
+have a Literate configuration built into the rest of my dotfiles but
+now I'm just using this simple elisp one (basically =use-package=
+everything).
+
+I now mainly use neovim and, for note taking,
+[https://logseq.com/][Logseq].
+
+I would like to use this again in place of Logseq at some point but
+I'd rather invest my time elsewhere at the minute.
+
+** LICENSE
+
+MIT
