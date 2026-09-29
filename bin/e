@@ -1,0 +1,37 @@
+#!/bin/sh
+
+vterm_printf() {
+    if [ -n "$TMUX" ] && { [ "${TERM%%-*}" = "tmux" ] || [ "${TERM%%-*}" = "screen" ]; }; then
+        printf "\033Ptmux;\033\033]%s\007\033\\" "$1"
+    elif [ "${TERM%%-*}" = "screen" ]; then
+        printf "\033P\033]%s\007\033\\" "$1"
+    else
+        printf "\033]%s\033\\" "$1"
+    fi
+}
+
+vterm_cmd() {
+    local_vterm_elisp=""
+    while [ "$#" -gt 0 ]; do
+        escaped="$(printf "%s" "$1" | sed -e 's|\\|\\\\|g' -e 's|"|\\"|g')"
+        local_vterm_elisp="${local_vterm_elisp}\"${escaped}\" "
+        shift
+    done
+    vterm_printf "51;E${local_vterm_elisp}"
+}
+
+target="${1:-.}"
+case "$target" in
+    /*) absolute="$target" ;;
+    *) absolute="$PWD/$target" ;;
+esac
+
+if [ -d "$absolute" ]; then
+    absolute="$(cd "$absolute" && pwd -P)" || exit 1
+else
+    dir="$(dirname "$absolute")"
+    base="$(basename "$absolute")"
+    absolute="$(cd "$dir" && pwd -P)/$base" || exit 1
+fi
+
+vterm_cmd find-file-above "$absolute"

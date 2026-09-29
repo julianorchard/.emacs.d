@@ -32,6 +32,102 @@
 (if (fboundp 'straight-use-package)
     (straight-use-package 'use-package))
 
+(when (eq system-type 'darwin)
+  (dolist (path '("/opt/homebrew/bin" "/usr/local/bin"))
+    (when (file-directory-p path)
+      (add-to-list 'exec-path path)
+      (setenv "PATH" (concat path path-separator (getenv "PATH")))))
+  (let ((gnupg-home (expand-file-name "~/.config/gnupg")))
+    (when (file-directory-p gnupg-home)
+      (setenv "GNUPGHOME" gnupg-home)
+      (setq epg-gpg-home-directory gnupg-home)))
+  (when-let ((gpg (executable-find "gpg")))
+    (setq epg-gpg-program gpg)))
+
+(let ((path (expand-file-name "bin" user-emacs-directory)))
+  (when (file-directory-p path)
+    (add-to-list 'exec-path path)
+    (setenv "PATH" (concat path path-separator (getenv "PATH")))))
+
+(use-package vterm
+  :commands (vterm vterm-other-window jdo/vterm-split)
+  :defines
+  tmux-mappings
+  vterm-buffer-name
+  vterm-eval-cmds
+  vterm-keymap-exceptions
+  vterm-mode-map
+  vterm-max-scrollback
+  :preface
+  (defun jdo/current-directory ()
+    "Return the most useful directory for commands started from this buffer."
+    (cond
+     (buffer-file-name
+      (file-name-directory buffer-file-name))
+     ((derived-mode-p 'dired-mode)
+      default-directory)
+     (t
+      default-directory)))
+
+  (defun jdo/vterm-split ()
+    "Open or focus a vterm in a bottom split."
+    (interactive)
+    (let* ((dir (file-name-as-directory (expand-file-name (jdo/current-directory))))
+           (buffer-name (format "*vterm: %s*" (abbreviate-file-name (directory-file-name dir))))
+           (height (max 12 (floor (* (window-total-height) 0.3))))
+           (buffer (get-buffer buffer-name))
+           (window (or (and buffer (get-buffer-window buffer))
+                       (split-window (selected-window) (- height) 'below))))
+      (select-window window)
+      (if (and buffer (buffer-live-p buffer))
+          (switch-to-buffer buffer)
+        (let ((default-directory dir))
+          (vterm buffer-name)))
+      (goto-char (point-max))
+      (when (fboundp 'evil-insert-state)
+        (evil-insert-state))))
+
+  (defun jdo/vterm-bind-tmux-prefix ()
+    "Keep the tmux-style prefix available inside vterm."
+    (when (boundp 'vterm-mode-map)
+      (keymap-set vterm-mode-map "C-a" tmux-mappings)
+      (when (fboundp 'evil-define-key)
+        (dolist (state '(insert normal motion visual emacs))
+          (evil-define-key state vterm-mode-map
+            (kbd "C-a") tmux-mappings)))
+      (when (fboundp 'evil-collection-define-key)
+        (dolist (state '(insert normal motion visual emacs))
+          (evil-collection-define-key state 'vterm-mode-map
+            (kbd "C-a") tmux-mappings)))))
+
+  (defun jdo/vterm-bind-local-tmux-prefix ()
+    "Keep the tmux-style prefix available in the current vterm buffer."
+    (jdo/vterm-bind-tmux-prefix)
+    (when (fboundp 'evil-local-set-key)
+      (dolist (state '(insert normal motion visual emacs))
+        (evil-local-set-key state (kbd "C-a") tmux-mappings))))
+
+  (defun jdo/vterm-find-file-above (path)
+    "Open PATH in an Emacs buffer above the current vterm window."
+    (let* ((buffer (find-file-noselect path))
+           (window (or (ignore-errors (windmove-find-other-window 'up))
+                       (split-window (selected-window) nil 'above))))
+      (select-window window)
+      (switch-to-buffer buffer)))
+  :init
+  (setq vterm-keymap-exceptions
+        '("C-a" "C-c" "C-x" "C-u" "C-g" "C-h" "C-l" "M-x" "M-o" "C-y" "M-y"))
+  :custom
+  (vterm-max-scrollback 10000)
+  :config
+  (jdo/vterm-bind-tmux-prefix)
+  (with-eval-after-load 'evil
+    (jdo/vterm-bind-tmux-prefix))
+  (with-eval-after-load 'evil-collection-vterm
+    (jdo/vterm-bind-tmux-prefix))
+  (add-to-list 'vterm-eval-cmds '("find-file-above" jdo/vterm-find-file-above))
+  (add-hook 'vterm-mode-hook #'jdo/vterm-bind-local-tmux-prefix))
+
 (use-package emacs
   :defines display-line-numbers-type
   :init
@@ -64,8 +160,7 @@
   (set-frame-parameter nil 'alpha-background 90)
   (add-to-list 'default-frame-alist '(alpha-background . 90))
   ;; ComicShanns
-  (defvar global-text-height 90)
-  (set-face-attribute 'default nil :font "ComicShannsMono Nerd Font Mono" :height global-text-height)
+  (set-face-attribute 'default nil :font "ComicShannsMono Nerd Font Mono" :height 220 :weight 'normal)
   ;; Prot video on this was very helpful
   (setq display-buffer-alist
         '(
@@ -129,6 +224,15 @@
   :bind
   (("M-s r" . consult-ripgrep)))
 (use-package consult-company)
+(use-package magit
+  :commands (magit-status magit-dispatch))
+(use-package diff-hl
+  :commands (global-diff-hl-mode diff-hl-dired-mode diff-hl-flydiff-mode diff-hl-magit-post-refresh)
+  :hook ((after-init . global-diff-hl-mode)
+         (dired-mode . diff-hl-dired-mode)
+         (magit-post-refresh . diff-hl-magit-post-refresh))
+  :config
+  (diff-hl-flydiff-mode 1))
 
 ;; Vertico == Ivy ??
 (use-package vertico
@@ -180,6 +284,9 @@
   evil-ex-define-cmd
   evil-define-key
   evil-set-leader
+  jdo/dired-up-or-current-directory
+  jdo/vterm-split
+  magit-status
   :init
   (setq evil-want-keybinding nil)
   (setq evil-want-integration t)
@@ -206,6 +313,9 @@
   ;; Vim Leader Mappings
   (evil-set-leader nil (kbd "SPC"))
   (evil-define-key 'normal 'global (kbd "<leader>ff") 'find-file)
+  (evil-define-key 'normal 'global (kbd "<leader>gs") 'magit-status)
+  (evil-define-key 'normal 'global (kbd "<leader>ts") 'jdo/vterm-split)
+  (evil-define-key 'normal 'global (kbd "-") 'jdo/dired-up-or-current-directory)
   (evil-define-key 'normal 'global (kbd "<leader><leader>") 'list-buffers))
 ;; Org mappings (this is currently causing evil-mode to fuck up somehow)
 (defvar-keymap tmux-org-mappings
@@ -295,6 +405,43 @@
   (terraform-indent-level 4)
   (setq terraform-format-on-save))
 
+(use-package dired
+  :straight nil
+  :ensure nil
+  :commands (dired dired-jump jdo/dired-up-or-current-directory)
+  :defines dired-mode-map
+  :preface
+  (defun jdo/dired-up-or-current-directory ()
+    "Open Dired for this file's directory, or go up from Dired."
+    (interactive)
+    (if (derived-mode-p 'dired-mode)
+        (dired-up-directory)
+      (let ((file buffer-file-name)
+            (dir (if buffer-file-name
+                     (file-name-directory buffer-file-name)
+                   default-directory)))
+        (dired dir)
+        (when file
+          (dired-goto-file file)))))
+  :custom
+  (dired-dwim-target t)
+  (dired-listing-switches "-alh")
+  :config
+  (bind-key "C-c C-e" #'wdired-change-to-wdired-mode dired-mode-map)
+  (with-eval-after-load 'evil
+    (evil-define-key 'normal dired-mode-map
+      (kbd "a") #'wdired-change-to-wdired-mode
+      (kbd "c") #'wdired-change-to-wdired-mode
+      (kbd "i") #'wdired-change-to-wdired-mode)))
+
+(use-package wdired
+  :straight nil
+  :ensure nil
+  :after dired
+  :custom
+  (wdired-allow-to-change-permissions t)
+  (wdired-create-parent-directories t))
+
 (use-package dired-subtree
   :after dired
   :functions dired-subtree-toggle dired-subtree-cycle
@@ -345,6 +492,13 @@
   :config
   (setq hl-todo-highlight-punctuation ":")
   (global-hl-todo-mode +1))
+
+(defun jdo/start-up ()
+  "Start up hook functionality."
+  (message "Emacs ready in %s with %d GCs"
+           (emacs-init-time)
+           gcs-done))
+(add-hook 'emacs-startup-hook #'jdo/start-up)
 
 (provide 'init)
 ;;; init.el ends here

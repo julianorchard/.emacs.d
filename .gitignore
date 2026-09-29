@@ -1,0 +1,8 @@
+early-init.el
+elpa/
+history
+transient/
+ede-projects.el
+straight/
+places
+auto-save-list/
